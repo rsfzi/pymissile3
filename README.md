@@ -12,5 +12,5 @@ venv/bin/pip install -r requirements.txt
 ```
 
 ## Usage
-$ sudo venv/bin/python missile.py
+$ sudo missile.sh
 

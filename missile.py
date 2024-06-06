@@ -1,12 +1,6 @@
-#!/usr/bin/env python3
-
 #
 #  Written by: Scott Weston <scott@weston.id.au>
 #  Edited  by: Zakaria ElQotbi <zakaria@elqotbi.com>
-#
-# - Version --------------------------------------------------------------
-#
-#  $Id: missile.py,v 2.0 2011/12/02 15:45:24 scott Exp $
 #
 # - License --------------------------------------------------------------
 #
