@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+
 #
 #  Written by: Scott Weston <scott@weston.id.au>
 #  Edited  by: Zakaria ElQotbi <zakaria@elqotbi.com>
@@ -38,415 +39,416 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-import usb
-import exceptions
-import urwid
-import urwid.curses_display
 import sys
 import getopt
 import random
 import re
-import os
 from time import sleep, time
 from socket import *
+import logging
+
+import usb
+import urwid
+import urwid.curses_display
 
 vendor_product_ids = [(0x1130,0x0202),(0x0416, 0x9391)]
 
 class centerMissileDevice:
-  dev       = None
-  handle    = None
-  STOP      = 0x0
-  LEFT      = 0x8
-  RIGHT     = 0x4
-  UP        = 0x2
-  DOWN      = 0x1
-  LEFTUP    = LEFT + UP
-  RIGHTUP   = RIGHT + UP
-  LEFTDOWN  = LEFT + DOWN
-  RIGHTDOWN = RIGHT + DOWN
-  FIRE      = 0x10
+    dev       = None
+    handle    = None
+    STOP      = 0x0
+    LEFT      = 0x8
+    RIGHT     = 0x4
+    UP        = 0x2
+    DOWN      = 0x1
+    LEFTUP    = LEFT + UP
+    RIGHTUP   = RIGHT + UP
+    LEFTDOWN  = LEFT + DOWN
+    RIGHTDOWN = RIGHT + DOWN
+    FIRE      = 0x10
 
-  def __init__(self,usbdevice):
-      try:
+    def __init__(self, usbdevice):
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.handle = usbdevice.open()
         self.handle.reset()
-        return
-      except NoMissilesError, e:
-        raise NoMissilesError()
 
-  def move(self, direction):
-     self.handle.controlMsg(0x21, 0x09, [0x5f, direction, 0xe0, 0xff, 0xfe], 0x0300, 0x00)
+    def move(self, direction):
+        self.handle.controlMsg(0x21, 0x09, [0x5f, direction, 0xe0, 0xff, 0xfe], 0x0300, 0x00)
 
 class legacyMissileDevice:
-  dev       = None
-  INITA     = (85, 83, 66, 67,  0,  0,  4,  0)
-  INITB     = (85, 83, 66, 67,  0, 64,  2,  0)
-  CMDFILL   = ( 8,  8,
-                0,  0,  0,  0,  0,  0,  0,  0,
-                0,  0,  0,  0,  0,  0,  0,  0,
-                0,  0,  0,  0,  0,  0,  0,  0,
-                0,  0,  0,  0,  0,  0,  0,  0,
-                0,  0,  0,  0,  0,  0,  0,  0,
-                0,  0,  0,  0,  0,  0,  0,  0,
-                0,  0,  0,  0,  0,  0,  0,  0)
-  STOP      = ( 0,  0,  0,  0,  0,  0)
-  LEFT      = ( 0,  1,  0,  0,  0,  0)
-  RIGHT     = ( 0,  0,  1,  0,  0,  0)
-  UP        = ( 0,  0,  0,  1,  0,  0)
-  DOWN      = ( 0,  0,  0,  0,  1,  0)
-  LEFTUP    = ( 0,  1,  0,  1,  0,  0)
-  RIGHTUP   = ( 0,  0,  1,  1,  0,  0)
-  LEFTDOWN  = ( 0,  1,  0,  0,  1,  0)
-  RIGHTDOWN = ( 0,  0,  1,  0,  1,  0)
-  FIRE      = ( 0,  0,  0,  0,  0,  1)
+    dev       = None
+    INITA     = (85, 83, 66, 67,  0,  0,  4,  0)
+    INITB     = (85, 83, 66, 67,  0, 64,  2,  0)
+    CMDFILL   = ( 8,  8,
+                  0,  0,  0,  0,  0,  0,  0,  0,
+                  0,  0,  0,  0,  0,  0,  0,  0,
+                  0,  0,  0,  0,  0,  0,  0,  0,
+                  0,  0,  0,  0,  0,  0,  0,  0,
+                  0,  0,  0,  0,  0,  0,  0,  0,
+                  0,  0,  0,  0,  0,  0,  0,  0,
+                  0,  0,  0,  0,  0,  0,  0,  0)
+    STOP      = ( 0,  0,  0,  0,  0,  0)
+    LEFT      = ( 0,  1,  0,  0,  0,  0)
+    RIGHT     = ( 0,  0,  1,  0,  0,  0)
+    UP        = ( 0,  0,  0,  1,  0,  0)
+    DOWN      = ( 0,  0,  0,  0,  1,  0)
+    LEFTUP    = ( 0,  1,  0,  1,  0,  0)
+    RIGHTUP   = ( 0,  0,  1,  1,  0,  0)
+    LEFTDOWN  = ( 0,  1,  0,  0,  1,  0)
+    RIGHTDOWN = ( 0,  0,  1,  0,  1,  0)
+    FIRE      = ( 0,  0,  0,  0,  0,  1)
 
-  def __init__(self, usbdevice):
-    try:
-      self.handle = usbdevice.open()
-      self.handle.reset()
-    except NoMissilesError, e:
-      raise NoMissilesError()
+    def __init__(self, usbdevice):
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.handle = usbdevice.open()
+        self.handle.reset()
 
-  def move(self, direction):
-    self.handle.controlMsg(0x21, 0x09, self.INITA, 0x02, 0x01)
-    self.handle.controlMsg(0x21, 0x09, self.INITB, 0x02, 0x01)
-    self.handle.controlMsg(0x21, 0x09, direction+self.CMDFILL, 0x02, 0x01)
+    def move(self, direction):
+        self.handle.controlMsg(0x21, 0x09, self.INITA, 0x02, 0x01)
+        self.handle.controlMsg(0x21, 0x09, self.INITB, 0x02, 0x01)
+        self.handle.controlMsg(0x21, 0x09, direction + self.CMDFILL, 0x02, 0x01)
 
-class NoMissilesError(Exception): pass
+class NoMissilesError(Exception):
+    pass
 
 class UsbDevice:
-  def __init__(self):
-    self.handle = None
-    self.launcher = None
-    self.dev = None
-    self.busses = usb.busses()
+    def __init__(self):
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.handle = None
+        self.launcher = None
+        self.dev = None
+        self.busses = usb.busses()
 
-  def probe(self):
-    count = 0
-    for bus in self.busses:
-      devices = bus.devices
-      for dev in devices:
-       for i, (vendor_id, product_id) in enumerate(vendor_product_ids):
-        if dev.idVendor==vendor_id and dev.idProduct==product_id:
-          if count==0:
-            self.dev = dev
-            self.conf = self.dev.configurations[0]
-            self.intf = self.conf.interfaces[0][0]
-            self.endpoints = []
-            for endpoint in self.intf.endpoints:
-              self.endpoints.append(endpoint)
-            if i == 0:
-              self.launcher = legacyMissileDevice
-              return self.launcher
-            elif i == 1:
-              self.launcher = centerMissileDevice
-              return self.launcher
-          else:
-            count=count+1
-    raise NoMissilesError()
+    def probe(self):
+        count = 0
+        for bus in self.busses:
+            devices = bus.devices
+            for dev in devices:
+                for i, (vendor_id, product_id) in enumerate(vendor_product_ids):
+                    if dev.idVendor == vendor_id and dev.idProduct == product_id:
+                        if count == 0:
+                            self.dev = dev
+                            self.conf = self.dev.configurations[0]
+                            self.intf = self.conf.interfaces[0][0]
+                            self.endpoints = []
+                            for endpoint in self.intf.endpoints:
+                                self.endpoints.append(endpoint)
+                            if i == 0:
+                                self.launcher = legacyMissileDevice
+                                return self.launcher
+                            elif i == 1:
+                                self.launcher = centerMissileDevice
+                                return self.launcher
+                        else:
+                            count += 1
+        raise NoMissilesError()
 
-  def open(self):
-    if self.handle:
-      self.handle = None
-    self.handle = self.dev.open()
-    try:
-      self.handle.detachKernelDriver(0)
-      self.handle.detachKernelDriver(1)
-    except usb.USBError, err:
-      print >> sys.stderr, err
+    def open(self):
+        if self.handle:
+            self.handle = None
+        self.handle = self.dev.open()
+        try:
+            self.handle.detachKernelDriver(0)
+            self.handle.detachKernelDriver(1)
+        except usb.USBError as err:
+            self.logger.exception("USB error")
 
-    self.handle.setConfiguration(self.conf)
-    self.handle.claimInterface(self.intf)
-    self.handle.setAltInterface(self.intf)
-    return self.handle
+        self.handle.setConfiguration(self.conf)
+        self.handle.claimInterface(self.intf)
+        self.handle.setAltInterface(self.intf)
+        return self.handle
 
 class MissileNoDisplay:
-  def run(self):
-    try:
-        usbdevice = UsbDevice()
-        MissileDevice = usbdevice.probe()
-        m = MissileDevice(usbdevice)
-    except NoMissilesError, e:
-        raise NoMissilesError
-    while 1:
-      keys = None
-      while not keys:
-        keys = raw_input("Enter something: ")
-      for k in keys:
-        if k == 'window resize':
-          size = self.ui.get_cols_rows()
-        elif k in ('w', 'up'):
-            m.move(MissileDevice.UP)
-        elif k in ('x', 'down'):
-            m.move(MissileDevice.DOWN)
-        elif k in ('a', 'left'):
-            m.move(MissileDevice.LEFT)
-        elif k in ('d', 'right'):
-            m.move(MissileDevice.RIGHT)
-        elif k in ('f', 'space'):
-            m.move(MissileDevice.FIRE)
-        elif k in ('s'):
-            m.move(MissileDevice.STOP)
-        elif k in ('q'):
-            m.move(MissileDevice.LEFTUP)
-        elif k in ('e'):
-            m.move(MissileDevice.RIGHTUP)
-        elif k in ('z'):
-            m.move(MissileDevice.LEFTDOWN)
-        elif k in ('c'):
-            m.move(MissileDevice.RIGHTDOWN)
-        elif k in ('r'):
-          for n in range(3):
-              sleep(0.5)
-        elif k in ('v'):
-            if  random.random() > 0.8:
-              m.move(MissileDevice.FIRE)
-        elif k in ('esc'):
-          return
+    def __init__(self):
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+    def run(self):
+        try:
+            usbdevice = UsbDevice()
+            MissileDevice = usbdevice.probe()
+            m = MissileDevice(usbdevice)
+        except NoMissilesError as e:
+            raise NoMissilesError()
+        while True:
+            keys = None
+            while not keys:
+                keys = input("Enter something: ")
+            for k in keys:
+                if k == 'window resize':
+                    size = self.ui.get_cols_rows()
+                elif k in ('w', 'up'):
+                    m.move(MissileDevice.UP)
+                elif k in ('x', 'down'):
+                    m.move(MissileDevice.DOWN)
+                elif k in ('a', 'left'):
+                    m.move(MissileDevice.LEFT)
+                elif k in ('d', 'right'):
+                    m.move(MissileDevice.RIGHT)
+                elif k in ('f', 'space'):
+                    m.move(MissileDevice.FIRE)
+                elif k in ('s'):
+                    m.move(MissileDevice.STOP)
+                elif k in ('q'):
+                    m.move(MissileDevice.LEFTUP)
+                elif k in ('e'):
+                    m.move(MissileDevice.RIGHTUP)
+                elif k in ('z'):
+                    m.move(MissileDevice.LEFTDOWN)
+                elif k in ('c'):
+                    m.move(MissileDevice.RIGHTDOWN)
+                elif k in ('r'):
+                    for n in range(3):
+                        sleep(0.5)
+                elif k in ('v'):
+                    if random.random() > 0.8:
+                        m.move(MissileDevice.FIRE)
+                elif k in ('esc'):
+                    return
 
 class MissileDisplay:
-  palette = [ ('body', 'black', 'dark cyan', 'standout'),
-              ('footer','light gray', 'dark blue'),
-              ('header', 'white', 'dark blue', 'underline'),
-              ('important','white', 'dark red', 'bold'),
-              ('key', 'light cyan', 'black', 'underline'),
-              ('title', 'white', 'black',), ]
+    palette = [
+        ('body', 'black', 'dark cyan', 'standout'),
+        ('footer','light gray', 'dark blue'),
+        ('header', 'white', 'dark blue', 'underline'),
+        ('important','white', 'dark red', 'bold'),
+        ('key', 'light cyan', 'black', 'underline'),
+        ('title', 'white', 'black'),
+    ]
 
-  BLANK   = urwid.Text("")
-  WARNING = urwid.Text([('important',"CAUTION: AIM AWAY FROM FACE")],
-                       align='center')
-  HEADER  = urwid.AttrWrap(urwid.Text("MISSILE COMMAND!", align='center'),
-                           'header')
-  FOOTER  = urwid.AttrWrap(urwid.Text("scott@weston.id.au", align='center'),
-                           'footer')
-  CONTENT = [ BLANK,
-              urwid.Text(["Use the following\n"
-                          "keys  to move\n\n"
-                          "Q   W   E \n"
-                          "  \ | /   \n"
-                          "A -(S)- D \n"
-                          "  / | \   \n"
-                          "Z   X   C \n\n"
-                          "F to fire all guns once\n"
-                          "R for rapid sequentual fire of all missiles\n"
-                          "S to Stop\n"
-                          "ESC to Exit\n\n",], align='center'),
-              WARNING,
-              BLANK, ]
+    BLANK   = urwid.Text("")
+    WARNING = urwid.Text([('important',"CAUTION: AIM AWAY FROM FACE")], align='center')
+    HEADER  = urwid.AttrWrap(urwid.Text("MISSILE COMMAND!", align='center'), 'header')
+    FOOTER  = urwid.AttrWrap(urwid.Text("scott@weston.id.au", align='center'), 'footer')
+    CONTENT = [
+        BLANK,
+        urwid.Text(["Use the following\n"
+                    "keys  to move\n\n"
+                    "Q   W   E \n"
+                    "  \ | /   \n"
+                    "A -(S)- D \n"
+                    "  / | \   \n"
+                    "Z   X   C \n\n"
+                    "F to fire all guns once\n"
+                    "R for rapid sequential fire of all missiles\n"
+                    "S to Stop\n"
+                    "ESC to Exit\n\n",], align='center'),
+        WARNING,
+        BLANK,
+    ]
 
-  def __init__(self):
-    self.listbox = urwid.ListBox(self.CONTENT)
-    view = urwid.AttrWrap(self.listbox, 'body')
-    self.view = urwid.Frame(view, header=self.HEADER, footer=self.FOOTER)
+    def __init__(self):
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.listbox = urwid.ListBox(self.CONTENT)
+        view = urwid.AttrWrap(self.listbox, 'body')
+        self.view = urwid.Frame(view, header=self.HEADER, footer=self.FOOTER)
 
-  def main(self):
-    self.ui = urwid.curses_display.Screen()
-    self.ui.register_palette(self.palette)
-    self.ui.run_wrapper(self.run)
+    def main(self):
+        self.ui = urwid.curses_display.Screen()
+        self.ui.register_palette(self.palette)
+        self.ui.run_wrapper(self.run)
 
-  def run(self):
+    def run(self):
+        try:
+            usbdevice = UsbDevice()
+            MissileDevice = usbdevice.probe()
+            m = MissileDevice(usbdevice)
+        except NoMissilesError as e:
+            raise NoMissilesError()
 
-    try:
-        usbdevice = UsbDevice()
-        MissileDevice = usbdevice.probe()
-        m = MissileDevice(usbdevice)
-    except NoMissilesError, e:
-        raise NoMissilesError
-
-    size = self.ui.get_cols_rows()
-    while 1:
-      canvas = self.view.render(size, focus=1)
-      self.ui.draw_screen(size, canvas)
-      keys = None
-      while not keys:
-        keys = self.ui.get_input()
-      for k in keys:
-        if k == 'window resize':
-          size = self.ui.get_cols_rows()
-        elif k in ('w', 'up'):
-            m.move(MissileDevice.UP)
-        elif k in ('x', 'down'):
-            m.move(MissileDevice.DOWN)
-        elif k in ('a', 'left'):
-            m.move(MissileDevice.LEFT)
-        elif k in ('d', 'right'):
-            m.move(MissileDevice.RIGHT)
-        elif k in ('f', 'space'):
-            m.move(MissileDevice.FIRE)
-        elif k in ('s'):
-            m.move(MissileDevice.STOP)
-        elif k in ('q'):
-            m.move(MissileDevice.LEFTUP)
-        elif k in ('e'):
-            m.move(MissileDevice.RIGHTUP)
-        elif k in ('z'):
-            m.move(MissileDevice.LEFTDOWN)
-        elif k in ('c'):
-            m.move(MissileDevice.RIGHTDOWN)
-        elif k in ('r'):
-          for n in range(3):
-              m.move(MissileDevice.FIRE)
-              sleep(0.5)
-        elif k in ('v'):
-            if  random.random() > 0.8:
-              m.move(MissileDevice.FIRE)
-        elif k in ('esc'):
-          return
-        self.view.keypress(size, k)
+        size = self.ui.get_cols_rows()
+        while True:
+            canvas = self.view.render(size, focus=True)
+            self.ui.draw_screen(size, canvas)
+            keys = None
+            while not keys:
+                keys = self.ui.get_input()
+            for k in keys:
+                if k == 'window resize':
+                    size = self.ui.get_cols_rows()
+                elif k in ('w', 'up'):
+                    m.move(MissileDevice.UP)
+                elif k in ('x', 'down'):
+                    m.move(MissileDevice.DOWN)
+                elif k in ('a', 'left'):
+                    m.move(MissileDevice.LEFT)
+                elif k in ('d', 'right'):
+                    m.move(MissileDevice.RIGHT)
+                elif k in ('f', 'space'):
+                    m.move(MissileDevice.FIRE)
+                elif k in ('s'):
+                    m.move(MissileDevice.STOP)
+                elif k in ('q'):
+                    m.move(MissileDevice.LEFTUP)
+                elif k in ('e'):
+                    m.move(MissileDevice.RIGHTUP)
+                elif k in ('z'):
+                    m.move(MissileDevice.LEFTDOWN)
+                elif k in ('c'):
+                    m.move(MissileDevice.RIGHTDOWN)
+                elif k in ('r'):
+                    for n in range(3):
+                        m.move(MissileDevice.FIRE)
+                        sleep(0.5)
+                elif k in ('v'):
+                    if random.random() > 0.8:
+                        m.move(MissileDevice.FIRE)
+                elif k in ('esc'):
+                    return
+                self.view.keypress(size, k)
 
 class MissileNetwork:
+    def __init__(self):
+        self.logger = logging.getLogger(self.__class__.__name__)
 
-  def main(self):
-    host = "localhost"
-    port = 20000
-    buf  = 1024
-    addr = (host,port)
+    def main(self):
+        host = "localhost"
+        port = 20000
+        buf  = 1024
+        addr = (host,port)
 
-    md = []
-    lt = 0
-    mc = 0
-    af = 0
-    lpid = 1
+        md = []
+        lt = 0
+        mc = 0
+        af = 0
+        lpid = 1
 
-    for missiles in range(10):
-      try:
-        md.append(MissileDevice(missiles))
-      except NoMissilesError, e:
-        break
-    if missiles==0:
-      raise NoMissilesError
+        for missiles in range(10):
+            try:
+                md.append(MissileDevice(missiles))
+            except NoMissilesError as e:
+                break
+        if missiles == 0:
+            raise NoMissilesError()
 
-    UDPSock = socket(AF_INET,SOCK_DGRAM)
-    UDPSock.bind(addr)
+        UDPSock = socket(AF_INET, SOCK_DGRAM)
+        UDPSock.bind(addr)
 
-    while 1:
-      cmd,addr = UDPSock.recvfrom(buf)
-      cmd = cmd.strip()
+        while True:
+            cmd, addr = UDPSock.recvfrom(buf)
+            cmd = cmd.strip()
 
-      spa = re.split(r':', cmd)
-      k = spa[0]
-      ppid = spa[1]
+            spa = re.split(r':', cmd)
+            k = spa[0]
+            ppid = spa[1]
 
-      if not k:
-        continue
-      else:
-        if k == "s":
-          if ppid != lpid:
-            print "Received a STOP for order %s but last order was %s, ignored" % (ppid, lpid)
-            continue
+            if not k:
+                continue
+            else:
+                if k == "s":
+                    if ppid != lpid:
+                        print(f"Received a STOP for order {ppid} but last order was {lpid}, ignored")
+                        continue
 
-        if abs(time()-lt) < 60:
-          mc = mc + 1
-        else:
-          mc = 0
-          af = 0
-# you can make it noisey here if you wanted to
-#         os.system("aplay sounds/firstwarning.wav &")
+                if abs(time() - lt) < 60:
+                    mc += 1
+                else:
+                    mc = 0
+                    af = 0
 
-        if mc > 60 and af == 0:
-          k = "v"
-# you can make it noisey here if you wanted to
-#         os.system("aplay sounds/secondwarning.wav &")
+                if mc > 60 and af == 0:
+                    k = "v"
 
-        print "Received via network at %2.2f command %s/%s (move count: %d, %d)" % (time(), k, ppid, mc, af)
+                print(f"Received via network at {time():.2f} command {k}/{ppid} (move count: {mc}, {af})")
 
-        lt = time()
-        lpid = ppid
+                lt = time()
+                lpid = ppid
 
-        if k in ('w', 'up'):
-          for m in md:
-            m.move(MissileDevice.UP)
-        elif k in ('x', 'down'):
-          for m in md:
-            m.move(MissileDevice.DOWN)
-        elif k in ('a', 'left'):
-          for m in md:
-            m.move(MissileDevice.LEFT)
-        elif k in ('d', 'right'):
-          for m in md:
-            m.move(MissileDevice.RIGHT)
-        elif k in ('f', 'space'):
-          for m in md:
-            m.move(MissileDevice.FIRE)
-        elif k in ('s', 'S'):
-          for m in md:
-            m.move(MissileDevice.STOP)
-        elif k in ('q'):
-          for m in md:
-            m.move(MissileDevice.LEFTUP)
-        elif k in ('e'):
-          for m in md:
-            m.move(MissileDevice.RIGHTUP)
-        elif k in ('z'):
-          for m in md:
-            m.move(MissileDevice.LEFTDOWN)
-        elif k in ('c'):
-          for m in md:
-            m.move(MissileDevice.RIGHTDOWN)
-        elif k in ('r'):
-          for n in range(3):
-            for m in md:
-              m.move(MissileDevice.FIRE)
-              sleep(0.5)
-        elif k in ('v'):
-          for m in md:
-            if random.random() > 0.9:
-              m.move(MissileDevice.FIRE)
-              af = 1
-        elif k in ('esc'):
-          UDPSock.close()
-          return
+                if k in ('w', 'up'):
+                    for m in md:
+                        m.move(MissileDevice.UP)
+                elif k in ('x', 'down'):
+                    for m in md:
+                        m.move(MissileDevice.DOWN)
+                elif k in ('a', 'left'):
+                    for m in md:
+                        m.move(MissileDevice.LEFT)
+                elif k in ('d', 'right'):
+                    for m in md:
+                        m.move(MissileDevice.RIGHT)
+                elif k in ('f', 'space'):
+                    for m in md:
+                        m.move(MissileDevice.FIRE)
+                elif k in ('s', 'S'):
+                    for m in md:
+                        m.move(MissileDevice.STOP)
+                elif k in ('q'):
+                    for m in md:
+                        m.move(MissileDevice.LEFTUP)
+                elif k in ('e'):
+                    for m in md:
+                        m.move(MissileDevice.RIGHTUP)
+                elif k in ('z'):
+                    for m in md:
+                        m.move(MissileDevice.LEFTDOWN)
+                elif k in ('c'):
+                    for m in md:
+                        m.move(MissileDevice.RIGHTDOWN)
+                elif k in ('r'):
+                    for n in range(3):
+                        for m in md:
+                            m.move(MissileDevice.FIRE)
+                            sleep(0.5)
+                elif k in ('v'):
+                    for m in md:
+                        if random.random() > 0.9:
+                            m.move(MissileDevice.FIRE)
+                            af = 1
+                elif k in ('esc'):
+                    UDPSock.close()
+                    return
 
 def usage():
-  print "Usage:"
-  print "  -h | --help : this help"
-  print "  -n | --network: simple network listener mode (Read the source Luke!)"
-  print "  -c | --console: read command directly from console (dont use urwid interface)"
-  print "  -v | --version: version"
-  sys.exit(2)
+    print("Usage:")
+    print("  -h | --help : this help")
+    print("  -n | --network: simple network listener mode (Read the source Luke!)")
+    print("  -c | --console: read command directly from console (dont use urwid interface)")
+    print("  -v | --version: version")
+    sys.exit(2)
 
 def version():
-  print "$Id: missile.py,v 1.13 2006/07/25 17:01:24 scott Exp $"
-  sys.exit(0)
+    print("$Id: missile.py,v 1.13 2006/07/25 17:01:24 scott Exp $")
+    sys.exit(0)
 
 def main(argv):
-  try:
-    opts, args = getopt.getopt(argv, "hvnc", ["help", "version", "network", "console"])
-  except getopt.GetoptError:
-    print "Sorry, bad option."
-    usage()
-
-  if opts:
-    for o, a in opts:
-      if o in ("-h", "--help"):
-        usage()
-      elif o in ("-v", "--version"):
-        version()
-      elif o in ("-n", "--network"):
-        try:
-          MissileNetwork().main()
-        except NoMissilesError, e:
-          print "No WMDs found."
-          return
-      elif o in ("-c", "--console"):
-        try:
-          MissileNoDisplay().run()
-        except NoMissilesError, e:
-          print "No WMDs found."
-          return
-      else:
-        try:
-          MissileDisplay().main()
-        except NoMissilesError, e:
-          print "No WMDs found."
-          return
-  else:
     try:
-      MissileDisplay().main()
-    except NoMissilesError, e:
-      print "No WMDs found."
-      return
+        opts, args = getopt.getopt(argv, "hvnc", ["help", "version", "network", "console"])
+    except getopt.GetoptError:
+        print("Sorry, bad option.")
+        usage()
 
-if __name__=="__main__":
-  main(sys.argv[1:])
+    logging.basicConfig(filename='missile.log', level=logging.DEBUG)
+    logger = logging.getLogger("main")
 
+    if opts:
+        for o, a in opts:
+            if o in ("-h", "--help"):
+                usage()
+            elif o in ("-v", "--version"):
+                version()
+            elif o in ("-n", "--network"):
+                try:
+                    MissileNetwork().main()
+                except NoMissilesError as e:
+                    logger.error("No WMDs found.")
+                    return
+            elif o in ("-c", "--console"):
+                try:
+                    MissileNoDisplay().run()
+                except NoMissilesError as e:
+                    logger.error("No WMDs found.")
+                    return
+            else:
+                try:
+                    MissileDisplay().main()
+                except NoMissilesError as e:
+                    logger.error("No WMDs found.")
+                    return
+    else:
+        try:
+            MissileDisplay().main()
+        except NoMissilesError as e:
+            logger.error("No WMDs found.")
+            return
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
