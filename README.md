@@ -1,8 +1,16 @@
-##############################################################################
-This is a fork of pymissile project: http://code.google.com/p/pymissile/
-that add support of center missile device (0416:9391) from Winbond Electronics
-##############################################################################
+# pymissile3
 
-To use install first : python-usb and python-urwid.
+## Info
+This is a fork of [pymissile-ng](https://github.com/zskdan/pymissile-ng)
+ported to Python3
 
-$ sudo ./missile.py
+## Install
+```
+git clone ...
+python -m venv venv
+venv/bin/pip install -r requirements.txt
+```
+
+## Usage
+$ sudo venv/bin/python missile.py
+
